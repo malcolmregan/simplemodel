@@ -10,11 +10,13 @@ from six.moves import xrange
 import tensorflow as tf
 from tensorflow.python.platform import app
 from tensorflow.python.platform import flags
-
+import numpy as np
 from cleverhans.attacks import SaliencyMapMethod
 from cleverhans.utils import other_classes, cnn_model, pair_visual, grid_visual
 from cleverhans.utils_mnist import data_mnist
 from cleverhans.utils_tf import model_train, model_eval, model_argmax
+
+from simplemodel11 import load_CPPN_model
 
 FLAGS = flags.FLAGS
 
@@ -33,11 +35,11 @@ flags.DEFINE_integer('source_samples', 11, 'Nb of test set examples to attack')
 flags.DEFINE_float('learning_rate', 0.1, 'Learning rate for training')
 
 def main(argv=None):
+    ITER_NUM=1
     """
     MNIST tutorial for the Jacobian-based saliency map approach (JSMA)
     :return:
     """
-    ITER_NUM=0
     # Disable Keras learning phase since we will be serving through tensorflow
     keras.layers.core.K.set_learning_phase(0)
 
@@ -49,51 +51,13 @@ def main(argv=None):
         keras.backend.set_image_dim_ordering('tf')
         print("INFO: '~/.keras/keras.json' sets 'image_dim_ordering' "
               "to 'th', temporarily setting to 'tf'")
-    
-    # Create TF session
+
+    # Create TF session and set as Keras backend session
     sess = tf.Session()
     keras.backend.set_session(sess)
+    print("Created TensorFlow session and set Keras backend.")
 
-    # Define input TF placeholder
-    x = tf.placeholder(tf.float32, shape=(None, 28, 28, 1))
-    y = tf.placeholder(tf.float32, shape=(None, 11))
-
-    def weight_variable(shape):
-        initial = tf.truncated_normal(shape, stddev=0.1)
-        return tf.Variable(initial)
-    def bias_variable(shape):
-        initial = tf.constant(0.1, shape=shape)
-        return tf.Variable(initial)
-    def conv2d(x, W):
-        return tf.nn.conv2d(x, W, strides=[1,1,1,1], padding='SAME')
-    def maxpool(x):
-        return tf.nn.max_pool(x, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
-    W_conv1 = weight_variable([5,5,1,8])
-    b_conv1 = bias_variable([8])
-    x_image = tf.reshape(x, [-1,28,28,1])
-    h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
-    h_pool1 = maxpool(h_conv1)
-    W_conv2 = weight_variable([5,5,8,8])
-    b_conv2 = bias_variable([8])
-    h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2)+b_conv2)
-    h_pool2 = maxpool(h_conv2)
-    W_fc1 = weight_variable([392,11])
-    b_fc1 = bias_variable([11])
-    h_pool2_flat = tf.reshape(h_pool2, [-1, 392])
-    y_conv = tf.matmul(h_pool2_flat, W_fc1) + b_fc1
-
-    #Restore checkpoint, start session
-    ckpt_path='./ckpt/CPPNx{0}/checkpoint.ckpt'.format(ITER_NUM)
-    saver = tf.train.Saver()
-    saver.restore(sess,ckpt_path)
-    
-    def model(x):
-        return tf.nn.softmax(y_conv)
-
-    preds = model(x)
-    print("Defined TensorFlow model graph.")
-
-    # Get MNIST test data and add 11th class to targets
+    # Get MNIST test data
     X_train, Y_trai, X_test, Y_tes = data_mnist()
     Y_test = np.zeros((np.shape(Y_tes)[0], 11))
     for s in range(np.shape(Y_tes)[0]):
@@ -105,6 +69,17 @@ def main(argv=None):
         temp=np.zeros((1,11))
         temp[0,0:10]=Y_trai[s]
         Y_train[s]=temp
+    
+    print("Loaded MNIST test data.")
+
+    # Define input TF placeholder
+    x = tf.placeholder(tf.float32, shape=(None, 28, 28, 1))
+    y = tf.placeholder(tf.float32, shape=(None, 11))
+
+    # Define TF model graph
+    model = load_CPPN_model(ITER_NUM)
+    preds = model(x)
+    print("Defined TensorFlow model graph.")
 
     ###########################################################################
     # Training the model using TensorFlow
@@ -127,11 +102,11 @@ def main(argv=None):
 
     # Evaluate the accuracy of the MNIST model on legitimate test examples
     eval_params = {'batch_size': FLAGS.batch_size}
-    #accuracy = model_eval(sess, x, y, preds, X_test, Y_test,
-    #                      args=eval_params)
+    accuracy = model_eval(sess, x, y, preds, X_test, Y_test,
+                          args=eval_params)
     assert X_test.shape[0] == 10000, X_test.shape
-    #print('Test accuracy on legitimate test examples: {0}'.format(accuracy))
-
+    print('Test accuracy on legitimate test examples: {0}'.format(accuracy))
+    
     ###########################################################################
     # Craft adversarial examples using the Jacobian-based saliency map approach
     ###########################################################################
@@ -164,6 +139,7 @@ def main(argv=None):
         # We want to find an adversarial example for each possible target class
         # (i.e. all classes that differ from the label given in the dataset)
         current_class = int(np.argmax(Y_test[sample_ind]))
+
         target_classes = other_classes(FLAGS.nb_classes, current_class)
 
         # For the grid visualization, keep original images along the diagonal
@@ -182,8 +158,10 @@ def main(argv=None):
                            'nb_classes': FLAGS.nb_classes, 'clip_min': 0.,
                            'clip_max': 1., 'targets': y,
                            'y_val': one_hot_target}
+            #print(np.shape(X_test[sample_ind:(sample_ind+1)]))
+            adv_x = jsma.generate_np(X_test[sample_ind:(sample_ind+1)],
+                                     **jsma_params)
 
-            adv_x = jsma.generate(X_test[sample_ind:(sample_ind+1)],**jsma_params)
             # Check if success was achieved
             res = int(model_argmax(sess, x, preds, adv_x) == target)
 
@@ -194,6 +172,7 @@ def main(argv=None):
             percent_perturb = float(nb_changed) / adv_x.reshape(-1).shape[0]
 
             # Display the original and adversarial images side-by-side
+            """
             if FLAGS.viz_enabled:
                 if 'figure' not in vars():
                     figure = pair_visual(
@@ -206,7 +185,7 @@ def main(argv=None):
                                    (FLAGS.img_rows, FLAGS.img_cols)),
                         np.reshape(adv_x, (FLAGS.img_rows,
                                    FLAGS.img_cols)), figure)
-
+            """
             # Add our adversarial example to our grid data
             grid_viz_data[target, current_class, :, :, :] = np.reshape(
                 adv_x, (FLAGS.img_rows, FLAGS.img_cols, FLAGS.nb_channels))

@@ -1,101 +1,106 @@
-### 2 convolutional layers, 1 fully-connected layer for MNIST
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+from __future__ import unicode_literals
 
-from tensorflow.examples.tutorials.mnist import input_data
-import tensorflow as tf
+import keras
+import os
+from cleverhans.utils_mnist import data_mnist
+from cleverhans.utils_tf import model_train, model_eval
+
+import keras
+from keras.utils import np_utils
+from keras.models import Sequential
+from keras.layers import Conv2D, MaxPooling2D, Dense, Dropout, Activation, Flatten
+import matplotlib.pyplot as plt
 import numpy as np
 import os
 
-def updatemodel(iteration):
-    from tensorflow.examples.tutorials.mnist import input_data
-    sesstrain=tf.InteractiveSession()
-    mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
-    x = tf.placeholder(tf.float32, shape=[None, 784])
-    y_ = tf.placeholder(tf.float32, shape=[None, 11])
+def initialize_model():
+    model=Sequential()
+
+    layers = [Conv2D(filters=8, kernel_size=5, strides=1, padding='same', input_shape=(28,28,1), activation='relu'),
+              #MaxPooling2D(pool_size=2, strides=2, padding='same'),
+              Conv2D(filters=8, kernel_size=5, strides=1, padding='same', activation='relu'),
+              #MaxPooling2D(pool_size=2, strides=2, padding='same'),
+              Flatten(),
+              Dense(11)]
+
+    for layer in layers:
+        model.add(layer)
+
+    model.add(Activation('softmax'))
+    
+    #dont know if compile is right - just copied and pasted from keras docs - MAKE SURE ITS RIGHT
+    model.compile(loss='categorical_crossentropy',
+              optimizer='sgd',
+              metrics=['accuracy'])   
+ 
+    return model
+
+def save_CPPN_model(model, iteration):
+    save_path = './ckpt/CPPNx{}'.format(iteration)
+    # If target directory does not exist, create
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+
+    # Construct full path
+    filepath = os.path.join(save_path, 'checkpoint.h5')
+    
+    model.save(filepath)
+    print("Model was saved to: " + filepath)
+
+
+def load_CPPN_model(iteration):
+    load_path = './ckpt/CPPNx{}'.format(iteration)
+    
+    # Construct full path to dumped model
+    filepath = os.path.join(load_path, 'checkpoint.h5')
+
+    # Check if file exists
+    assert os.path.exists(filepath)
+
+    return keras.models.load_model(filepath)
+
+def augmentdataset(iteration):
+    X_train, Y_trai, X_test, Y_tes = data_mnist()
+    Y_test = np.zeros((np.shape(Y_tes)[0], 11))
+    for s in range(np.shape(Y_tes)[0]):
+        temp=np.zeros((1,11))
+        temp[0,0:10]=Y_tes[s]
+        Y_test[s]=temp
+    Y_train = np.zeros((np.shape(Y_trai)[0], 11))
+    for s in range(np.shape(Y_trai)[0]):
+        temp=np.zeros((1,11))
+        temp[0,0:10]=Y_trai[s]
+        Y_train[s]=temp
 
     numberoffiles=0
     for itera in range(1, iteration+1):
         for CLASS in range(10):
             numberoffiles = numberoffiles + len(os.walk('./CPPNGenerated/CPPNx{}/class{}'.format(itera, CLASS)).next()[2])
-     
-    examples = np.zeros([np.shape(mnist.train.images)[0]+numberoffiles,np.shape(mnist.train.images)[1], 11])
-    
+
+    examples = np.zeros([np.shape(X_train)[0]+numberoffiles, 28, 28, 1, 11])
+
     k=0
-    for i in range(np.shape(mnist.train.images)[0]):
-        examples[i,:,0] = mnist.train.images[i]
-        examples[i,0,:][np.where(mnist.train.labels[i]==1)[0][0]] = 1
+    for i in range(np.shape(X_train)[0]):
+        examples[i,:,:,:,0] = X_train[i]
+        examples[i,0,0,0,:][np.where(Y_train[i]==1)[0][0]] = 1
         k=k+1
 
     for itera in range(1,iteration+1):
         for CLASS in range(10):
             files_in_dir = os.listdir('./CPPNGenerated/CPPNx{}/class{}'.format(itera, CLASS))
-            for files in files_in_dir:          
+            for files in files_in_dir:
                 data = np.load(os.path.join('./CPPNGenerated/CPPNx{}/class{}'.format(itera, CLASS), files))
                 array = data['features']
                 array = array[0,0,:,:]
-                examples[k,:,0] = np.ndarray.flatten(array)
-                examples[k,0,:] = [0,0,0,0,0,0,0,0,0,0,1]
+                examples[k,:,:,0,0] = array
+                examples[k,0,0,0,:] = [0,0,0,0,0,0,0,0,0,0,1]
                 k=k+1
+   
+    np.random.shuffle(examples)
 
-    def weight_variable(shape):
-        initial = tf.truncated_normal(shape, stddev=0.1)
-        return tf.Variable(initial)
-
-    def bias_variable(shape):
-        initial = tf.constant(0.1, shape=shape)
-        return tf.Variable(initial)
-
-    def conv2d(x, W):
-        return tf.nn.conv2d(x, W, strides=[1,1,1,1], padding='SAME')
-
-    def maxpool(x):
-        return tf.nn.max_pool(x, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
-
-    W_conv1 = weight_variable([5,5,1,8])
-    b_conv1 = bias_variable([8])
-    x_image = tf.reshape(x, [-1,28,28,1])
-    h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
-    h_pool1 = maxpool(h_conv1)
-
-    W_conv2 = weight_variable([5,5,8,8])
-    b_conv2 = bias_variable([8])
-    h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2)+b_conv2)
-    h_pool2 = maxpool(h_conv2)
-
-    W_fc1 = weight_variable([392,11]) ###392 by big number and then another fully connected layer??
-    b_fc1 = bias_variable([11])
-    h_pool2_flat = tf.reshape(h_pool2, [-1, 392])
-
-    y_conv = tf.matmul(h_pool2_flat, W_fc1) + b_fc1
-
-    cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y_conv))
-    train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
-    correct_prediction = tf.equal(tf.argmax(y_conv, 1), tf.argmax(y_, 1)) 
-    accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-    sesstrain.run(tf.global_variables_initializer())
-
-    batchcount=0
-    for i in range(20000):
-        if (batchcount+50)%np.shape(examples)[0]<batchcount%np.shape(examples)[0]:
-            batchcount=0
-        xbatch = examples[(batchcount%np.shape(examples)[0]):((batchcount+50)%np.shape(examples)[0]),:,0]
-        ybatch = examples[(batchcount%np.shape(examples)[0]):((batchcount+50)%np.shape(examples)[0]),0,:]
-        if i%100==0:
-            train_accuracy = accuracy.eval(feed_dict={x: xbatch, y_: ybatch})
-            print("Step: %d, Training Accuracy: %g"%(i, train_accuracy))
-        train_step.run(feed_dict={x: xbatch, y_: ybatch})
-        batchcount=batchcount+50
-
-    testlabels = np.zeros([np.shape(mnist.test.labels)[0], 11])
-    for k in range(np.shape(mnist.test.labels)[0]):
-        testlabels[k] = np.append(mnist.test.labels[k],0)
-
-    print("Model Updated...")
-    #print("Model Updated... Test Accuracy: %g"%accuracy.eval(feed_dict={x: mnist.test.images, y_: testlabels}))
-
-    saver = tf.train.Saver()
-    snapshot_name = "checkpoint"
-    if not os.path.exists('./ckpt/CPPNx{}'.format(iteration)):
-        os.makedirs('./ckpt/CPPNx{}'.format(iteration))
-    fn = saver.save(sesstrain, "%s/%s.ckpt" % ('./ckpt/CPPNx{}'.format(iteration), snapshot_name))
-    print("Model saved in file: %s" % fn)
-    sesstrain.close()
+    X_train = examples[:,:,:,:,0]
+    Y_train = examples[:,0,0,0,:]
+    return X_train, Y_train, X_test, Y_test

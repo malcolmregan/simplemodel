@@ -4,7 +4,8 @@ import matplotlib.pyplot as plt
 import os
 import numpy as np
 import random
-ITER_NUM=1
+
+ITER_NUM=2
 datadir='./CPPNGenerated/CPPNx{}/'.format(ITER_NUM)
 
 for CLASS in range(0,10):
@@ -52,7 +53,7 @@ for CLASS in range(0,10):
     fig.tight_layout()
     fig.subplots_adjust(top=0.93)
 
-    #plt.show()
-    plt.suptitle('CPPNx{}, Class {}'.format(ITER_NUM, CLASS), size=25)
-    plt.savefig('CPPNGenerated/images/CPPNx{}/Class{}.png'.format(ITER_NUM, CLASS))
+    plt.show()
+    #plt.suptitle('CPPNx{}, Class {}'.format(ITER_NUM, CLASS), size=25)
+    #plt.savefig('CPPNGenerated/images/CPPNx{}/Class{}.png'.format(ITER_NUM, CLASS))
     plt.close()

@@ -1,76 +1,138 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+from __future__ import unicode_literals
+
+import keras
+from keras import backend
 import tensorflow as tf
+from tensorflow.python.platform import app
+from tensorflow.python.platform import flags
 import numpy as np
+from cleverhans.utils_mnist import data_mnist
+from cleverhans.utils_tf import model_train, model_eval
 from cleverhans.attacks import FastGradientMethod
-from tensorflow.examples.tutorials.mnist import input_data
+from cleverhans.utils import cnn_model
+from simplemodel11 import load_CPPN_model
 
-ITER_NUM = 2
+FLAGS = flags.FLAGS
 
-mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
-x = tf.placeholder(tf.float32, shape=[None, 784])
-y_ = tf.placeholder(tf.float32, shape=[None, 10])
+flags.DEFINE_integer('nb_epochs', 6, 'Number of epochs to train model')
+flags.DEFINE_integer('batch_size', 128, 'Size of training batches')
+flags.DEFINE_float('learning_rate', 0.1, 'Learning rate for training')
 
-gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.01)
-sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
 
-def weight_variable(shape):
-    initial = tf.truncated_normal(shape, stddev=0.1)
-    return tf.Variable(initial)
-def bias_variable(shape):
-    initial = tf.constant(0.1, shape=shape)
-    return tf.Variable(initial)
-def conv2d(x, W):
-    return tf.nn.conv2d(x, W, strides=[1,1,1,1], padding='SAME')
-def maxpool(x):
-    return tf.nn.max_pool(x, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
-W_conv1 = weight_variable([5,5,1,8])
-b_conv1 = bias_variable([8])
-x_image = tf.reshape(x, [-1,28,28,1])
-h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
-h_pool1 = maxpool(h_conv1)
-W_conv2 = weight_variable([5,5,8,8])
-b_conv2 = bias_variable([8])
-h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2)+b_conv2)
-h_pool2 = maxpool(h_conv2)
-W_fc1 = weight_variable([392,10])
-b_fc1 = bias_variable([10])
-h_pool2_flat = tf.reshape(h_pool2, [-1, 392])
-y_conv = tf.matmul(h_pool2_flat, W_fc1) + b_fc1
+def main(argv=None):
+    ITER_NUM=0
+    """
+    MNIST cleverhans tutorial
+    :return:
+    """
+    keras.layers.core.K.set_learning_phase(0)
+
+    # Set TF random seed to improve reproducibility
+    tf.set_random_seed(1234)
+
+    if not hasattr(backend, "tf"):
+        raise RuntimeError("This tutorial requires keras to be configured"
+                           " to use the TensorFlow backend.")
+
+    # Image dimensions ordering should follow the Theano convention
+    if keras.backend.image_dim_ordering() != 'tf':
+        keras.backend.set_image_dim_ordering('tf')
+        print("INFO: '~/.keras/keras.json' sets 'image_dim_ordering' to "
+              "'th', temporarily setting to 'tf'")
+
+    # Create TF session and set as Keras backend session
+    sess = tf.Session()
+    keras.backend.set_session(sess)
+
+    # Get MNIST test data
+    X_train, Y_trai, X_test, Y_tes = data_mnist()
+    Y_test = np.zeros((np.shape(Y_tes)[0], 11))
+    for s in range(np.shape(Y_tes)[0]):
+        temp=np.zeros((1,11))
+        temp[0,0:10]=Y_tes[s]
+        Y_test[s]=temp
+    Y_train = np.zeros((np.shape(Y_trai)[0], 11))
+    for s in range(np.shape(Y_trai)[0]):
+        temp=np.zeros((1,11))
+        temp[0,0:10]=Y_trai[s]
+        Y_train[s]=temp
+
+
+    ## Find out what this does
+    assert Y_train.shape[1] == 11.
+    label_smooth = .1
+    Y_train = Y_train.clip(label_smooth / 9., 1. - label_smooth)
+
+    # Define input TF placeholder
+    x = tf.placeholder(tf.float32, shape=(None, 28, 28, 1))
+    y = tf.placeholder(tf.float32, shape=(None, 11))
+
+    # Define TF model graph
+    model = load_CPPN_model(ITER_NUM)
+    predictions = model(x)
+    print("Defined TensorFlow model graph.")
+
+    def evaluate():
+        # Evaluate the accuracy of the MNIST model on legitimate test examples
+        eval_params = {'batch_size': FLAGS.batch_size}
+        accuracy = model_eval(sess, x, y, predictions, X_test, Y_test,
+                              args=eval_params)
+        assert X_test.shape[0] == 10000, X_test.shape
+        print('Test accuracy on legitimate test examples: %0.4f' % accuracy)
+
+    # Train an MNIST model
+    train_params = {
+        'nb_epochs': FLAGS.nb_epochs,
+        'batch_size': FLAGS.batch_size,
+        'learning_rate': FLAGS.learning_rate
+    }
+    #model_train(sess, x, y, predictions, X_train, Y_train,
+    #            evaluate=evaluate, args=train_params)
+
+    # Initialize the Fast Gradient Sign Method (FGSM) attack object and graph
+    fgsm = FastGradientMethod(model, sess=sess)
+    fgsm_params = {'eps': 0.3}
+    adv_x = fgsm.generate(x, **fgsm_params)
+    preds_adv = model(adv_x)
     
-#Restore checkpoint, start session
-ckpt_path='./ckpt/CPPNx{0}/checkpoint.ckpt'.format(ITER_NUM)
-saver = tf.train.Saver()
-saver.restore(sess,ckpt_path)
+    #####
+    # Make loop to look at different adversarial examples
+    # with 
+    # print(adv_x.eval(session=sess, feed_dict={x: X_test(index_of_example)}))
 
-val = mnist.train.next_batch(1000)
-x_val = val[0]
-y_val = val[1]
+    # Evaluate the accuracy of the MNIST model on adversarial examples
+    eval_par = {'batch_size': FLAGS.batch_size}
+    accuracy = model_eval(sess, x, y, preds_adv, X_test, Y_test, args=eval_par)
+    print('Test accuracy on adversarial examples: %0.4f\n' % accuracy)
 
-def model(inp):
-    return tf.nn.softmax(y_conv)
+    """
+    print("Repeating the process, using adversarial training")
+    # Redefine TF model graph
+    model_2 = cnn_model()
+    predictions_2 = model_2(x)
+    fgsm2 = FastGradientMethod(model_2, sess=sess)
+    predictions_2_adv = model_2(fgsm2.generate(x, **fgsm_params))
 
-fgsm = FastGradientMethod(model, 'tf', sess=sess)
-fgsm_params = {'eps': 0.3} #see what putting in labels does
-adv_x = fgsm.generate(x, **fgsm_params)
-example = sess.run(adv_x, feed_dict={x: x_val})
-preds_adv = model(adv_x)
-prediction = sess.run(preds_adv, feed_dict={x: example})
+    def evaluate_2():
+        # Accuracy of adversarially trained model on legitimate test inputs
+        eval_params = {'batch_size': FLAGS.batch_size}
+        accuracy = model_eval(sess, x, y, predictions_2, X_test, Y_test,
+                              args=eval_params)
+        print('Test accuracy on legitimate test examples: %0.4f' % accuracy)
 
-import matplotlib.pyplot as plt
+        # Accuracy of the adversarially trained model on adversarial examples
+        accuracy_adv = model_eval(sess, x, y, predictions_2_adv, X_test,
+                                  Y_test, args=eval_params)
+        print('Test accuracy on adversarial examples: %0.4f' % accuracy_adv)
 
-for CLASS in range(10):
-    fig = plt.figure()
-    ax=[0]*25
-    count = 0
-    for i in range(500):
-        if count<25:
-            if prediction[i][CLASS]>.9:
-                temp = np.reshape(example[i], [28,28])
-                ax[count] = fig.add_subplot(5 ,5, count+1, aspect='equal')
-                ax[count].imshow(temp, cmap='Greys', interpolation='nearest')
-                count=count+1
+    # Perform and evaluate adversarial training
+    model_train(sess, x, y, predictions_2, X_train, Y_train,
+                predictions_adv=predictions_2_adv, evaluate=evaluate_2,
+                args=train_params)
+    """
 
-    plt.show()
-    #plt.suptitle('FGSM for CPPNx{0}, Class {1}'.format(ITER_NUM, CLASS), size=25)
-    #plt.savefig('FGSMGenerated/images/CPPNx{0}/Class{1}.png'.format(ITER_NUM, CLASS))
-    #plt.close()
-
+if __name__ == '__main__':
+    app.run()
