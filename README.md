@@ -4,13 +4,15 @@ The file generate_FGSM_and_train.py was created for the purposes of troubleshoot
 It trains a model on MNIST. generates FGSM examples for this model, and trains a new model on the FGSM examples.
 
 TO RUN FGSM+CPPN TRAINING SCRIPT:
-    add cleverhans path to PYTHONPATH before running:
-    'export PYTHONPATH='./cleverhans':$PYTHONPATH
 
-    to run:
-    'python CPPNkeras.py'
+    add cleverhans path to PYTHONPATH before running:
+    >>export PYTHONPATH=./cleverhans:$PYTHONPATH
+    to run:    
+    >>python CPPNkeras.py
+    
 
 File descriptions:
+
     CPPNkeras.py - main file. Runs iterative FGSM+CPPN generation and training for a simple model.
     CPPN_config - contains parameters and parameter values used by NEAT.
     fgsm_stuff.py - contains functions for generation and loading of FGSM examples.
