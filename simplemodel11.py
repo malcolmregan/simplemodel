@@ -5,8 +5,11 @@ from __future__ import unicode_literals
 
 import keras
 import os
+
 from cleverhans.utils_mnist import data_mnist
 from cleverhans.utils_tf import model_train, model_eval
+
+import fgsm_stuff
 
 import keras
 from keras.utils import np_utils
@@ -46,6 +49,9 @@ def save_CPPN_model(model, iteration):
 
     # Construct full path
     filepath = os.path.join(save_path, 'checkpoint.h5')
+    if os.path.exists(filepath):
+        print('Replacing Model')
+        os.remove(filepath)
     
     model.save(filepath)
     print("Model was saved to: " + filepath)
@@ -74,11 +80,16 @@ def augmentdataset(iteration):
         temp=np.zeros((1,11))
         temp[0,0:10]=Y_trai[s]
         Y_train[s]=temp
-
+    
     numberoffiles=0
     for itera in range(1, iteration+1):
         for CLASS in range(10):
             numberoffiles = numberoffiles + len(os.walk('./CPPNGenerated/CPPNx{}/class{}'.format(itera, CLASS)).next()[2])
+    
+    for itera in range(0,iteration+1):
+        if os.path.exists('./FGSMGenerated/FGSMx{}'.format(iteration)):
+            X_fgsm, Y_fgsm = fgsm_stuff.get_fgsm_data(itera)
+            numberoffiles = numberoffiles + np.shape(X_fgsm)[0]
 
     examples = np.zeros([np.shape(X_train)[0]+numberoffiles, 28, 28, 1, 11])
 
@@ -98,9 +109,18 @@ def augmentdataset(iteration):
                 examples[k,:,:,0,0] = array
                 examples[k,0,0,0,:] = [0,0,0,0,0,0,0,0,0,0,1]
                 k=k+1
-   
+
+    for itera in range(0, iteration+1):
+        if os.path.exists('./FGSMGenerated/FGSMx{}'.format(iteration)):
+	    X_fgsm, Y_fgsm = fgsm_stuff.get_fgsm_data(itera)
+            examples[k:(k+np.shape(X_fgsm)[0]),:,:,0,0]=X_fgsm[:,:,:,0]
+            examples[k:(k+np.shape(X_fgsm)[0]),0,0,0,:]=Y_fgsm
+            k = k + np.shape(X_fgsm)[0]+1
+        
     np.random.shuffle(examples)
 
     X_train = examples[:,:,:,:,0]
     Y_train = examples[:,0,0,0,:]
+    print("Dataset Augmented")
+    print(np.shape(X_train))
     return X_train, Y_train, X_test, Y_test

@@ -18,6 +18,8 @@ from cleverhans.utils_tf import model_train, model_eval, model_argmax
 
 from simplemodel11 import load_CPPN_model
 
+# change to create 800 examples that succesfully trick model for each class and save them to JSMAGenerated
+
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string('train_dir', '/tmp', 'Directory storing the saved model.')
@@ -31,11 +33,11 @@ flags.DEFINE_integer('img_cols', 28, 'Input column dimension')
 flags.DEFINE_integer('nb_channels', 1, 'Nb of color channels in the input.')
 flags.DEFINE_integer('nb_filters', 64, 'Number of convolutional filter to use')
 flags.DEFINE_integer('nb_pool', 2, 'Size of pooling area for max pooling')
-flags.DEFINE_integer('source_samples', 11, 'Nb of test set examples to attack')
+flags.DEFINE_integer('source_samples', 10, 'Nb of test set examples to attack')
 flags.DEFINE_float('learning_rate', 0.1, 'Learning rate for training')
 
 def main(argv=None):
-    ITER_NUM=1
+    ITER_NUM=2
     """
     MNIST tutorial for the Jacobian-based saliency map approach (JSMA)
     :return:
@@ -138,8 +140,11 @@ def main(argv=None):
 
         # We want to find an adversarial example for each possible target class
         # (i.e. all classes that differ from the label given in the dataset)
+        
+        sample_ind = np.where(Y_test[:,sample_ind]==1.)[0][0]
+        
         current_class = int(np.argmax(Y_test[sample_ind]))
-
+        print(current_class) 
         target_classes = other_classes(FLAGS.nb_classes, current_class)
 
         # For the grid visualization, keep original images along the diagonal
@@ -191,8 +196,8 @@ def main(argv=None):
                 adv_x, (FLAGS.img_rows, FLAGS.img_cols, FLAGS.nb_channels))
 
             # Update the arrays for later analysis
-            results[target, sample_ind] = res
-            perturbations[target, sample_ind] = percent_perturb
+            results[target, current_class] = res
+            perturbations[target, current_class] = percent_perturb
 
     print('--------------------------------------')
 
@@ -215,7 +220,7 @@ def main(argv=None):
 
     # Finally, block & display a grid of all the adversarial examples
     if FLAGS.viz_enabled:
-        _ = grid_visual(grid_viz_data)
+        _ = grid_visual(grid_viz_data, ITER_NUM)
 
 if __name__ == '__main__':
     app.run()

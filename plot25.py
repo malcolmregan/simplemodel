@@ -5,8 +5,8 @@ import os
 import numpy as np
 import random
 
-ITER_NUM=2
-datadir='./CPPNGenerated/CPPNx{}/'.format(ITER_NUM)
+ITER_NUM=0
+datadir='./FGSMGenerated/FGSMx{}/'.format(ITER_NUM)
 
 for CLASS in range(0,10):
     fig = plt.figure()
@@ -56,4 +56,4 @@ for CLASS in range(0,10):
     plt.show()
     #plt.suptitle('CPPNx{}, Class {}'.format(ITER_NUM, CLASS), size=25)
     #plt.savefig('CPPNGenerated/images/CPPNx{}/Class{}.png'.format(ITER_NUM, CLASS))
-    plt.close()
+    #plt.close()

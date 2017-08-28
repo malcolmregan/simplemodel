@@ -261,7 +261,7 @@ def pair_visual(original, adversarial, figure=None):
     return figure
 
 
-def grid_visual(data):
+def grid_visual(data,iternum):
     """
     This function displays a grid of images to show full misclassification
     :param data: grid data of the form;
@@ -290,5 +290,7 @@ def grid_visual(data):
                 plt.imshow(data[x, y, :, :, :])
 
     # Draw the plot and return
-    plt.show()
+    plt.suptitle('JSMA on CPPNx{}'.format(iternum), size=25)
+    plt.savefig('JSMAonCPPNx{}'.format(iternum))
+    #plt.show()
     return figure

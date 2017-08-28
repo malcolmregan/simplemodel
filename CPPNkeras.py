@@ -2,6 +2,8 @@ from neat import nn, population, statistics
 import tensorflow as tf
 import numpy as np
 import os
+from fgsm_stuff import DO_FGSM, get_fgsm_data
+
 from tensorflow.examples.tutorials.mnist import input_data
 from simplemodel11 import initialize_model, save_CPPN_model, load_CPPN_model, augmentdataset
 
@@ -47,14 +49,6 @@ keras.backend.set_session(sess)
 x = tf.placeholder(tf.float32, shape=[None, 28, 28, 1])
 y = tf.placeholder(tf.float32, shape=[None, 11])
 
-def evaluate():
-        # Evaluate the accuracy of the MNIST model on legitimate test examples
-        eval_params = {'batch_size': 128}
-        accuracy = model_eval(sess, x, y, predictions, X_test, Y_test,
-                              args=eval_params)
-        assert X_test.shape[0] == 10000, X_test.shape
-        print('Test accuracy on legitimate test examples: %0.4f' % accuracy)
-
 if not os.path.exists('./ckpt'):
     os.makedirs('./ckpt')
 
@@ -64,14 +58,28 @@ if not os.path.exists('./CPPNGenerated'):
 if not os.path.exists('./ckpt/CPPNx0/'):
     model=initialize_model()
     predictions = model(x)
-    # Train an MNIST model
-    train_params = {
-        'nb_epochs': 25,
-        'batch_size': 128,
-        'learning_rate': 0.1
-    }
-    model_train(sess, x, y, predictions, X_train, Y_train,
-                evaluate=evaluate, args=train_params)
+
+    # train network on mnist
+    model.fit(X_train,Y_train,epochs=10,batch_size=128,verbose=1)
+    score = model.evaluate(X_test,Y_test,verbose=0)
+    print(score[1])
+
+    # perform FGSM and get FGSM examples
+    DO_FGSM(model,x,y,predictions,sess,0)
+    X_train, Y_train, X_test, Y_test =  augmentdataset(0) # FYI: augmentdataset() just returns MNIST testset as it was before, only training set is augmented
+   
+    del model
+    del predictions
+    model = initialize_model()
+    predictions=model(x)
+    score = model.evaluate(X_test,Y_test,verbose=0)
+    print(score[1])    
+
+    # train model on FGSM examples
+    model.fit(X_train,Y_train,epochs=10,batch_size=128,verbose=1)
+    score = model.evaluate(X_test,Y_test,verbose=0)
+    print(score[1])
+   
     save_CPPN_model(model,0)
 
 def loadcheckpoint(iteration):
@@ -80,6 +88,8 @@ def loadcheckpoint(iteration):
     return model
 
 def makenewdirectories(iteration):
+    if not os.path.exists('./CPPNGenerated'):
+        os.makedirs('./CPPNGenerated')
     if not os.path.exists('./CPPNGenerated/CPPNx{}'.format(iteration)):
         print "Making New Directories..."
         os.makedirs('./CPPNGenerated/CPPNx{}'.format(iteration))
@@ -188,6 +198,9 @@ def get_fitness(g, inp, CLASS, k, iteration):
         pop.config.compatibility_threshold=100.0
     if gen - lastsave > 3000:
         fitness = 100
+    if gen > 5000:
+        fitness = 100
+        lastsave = gen+3000
     return fitness
 
 
@@ -213,10 +226,11 @@ if q == 'G':
     model = loadcheckpoint(iteration-1)
     predictions = model(x)
     k = 0
-    for files in os.listdir('./CPPNGenerated/CPPNx{}/class0'.format(iteration)):
-        high = int(str(files).split('_')[0])
-        if high > k:
-            k = high
+    for CLASS in range(10):
+        for files in os.listdir('./CPPNGenerated/CPPNx{}/class{}'.format(iteration,CLASS)):
+            high = int(str(files).split('_')[0])
+            if high > k:
+                k = high
     hask=np.zeros([10])
     for CLASS in range(10):
         for files in os.listdir('./CPPNGenerated/CPPNx{}/class{}'.format(iteration,CLASS)):
@@ -235,13 +249,22 @@ elif q == 'T':
     X_train, Y_train, X_test, Y_test = augmentdataset(iteration)
     model = initialize_model()
     predictions = model(x)
-    train_params = {
-        'nb_epochs': 25,
-        'batch_size': 128,
-        'learning_rate': 0.1
-        }
-    model_train(sess, x, y, predictions, X_train, Y_train,
-                evaluate=evaluate, args=train_params)
+
+    model.fit(X_train,Y_train,epochs=10,batch_size=128,verbose=1)
+    score = model.evaluate(X_test,Y_test,verbose=0)
+    print(score[1])
+    
+    DO_FGSM(model,x,y,predictions,sess,0)
+
+    X_train, Y_train, X_test, Y_test = augmentdataset(iteration)
+    del model
+    del predictions
+    model = initialize_model()
+    predictions = model(x)
+    model.fit(X_train,Y_train,epochs=10,batch_size=128,verbose=1)
+    score = model.evaluate(X_test,Y_test,verbose=0)
+    print(score[1])
+
     save_CPPN_model(model,iteration)
     iteration=iteration+1
     makenewdirectories(iteration)
@@ -266,19 +289,31 @@ while 1:
     if gen - lastsave >= 3000:
         done[clazz] = done[clazz]+1
     if np.count_nonzero(done>=3) == 10: # for later iterations mayeb change to count_nonxero>=8
+
         X_train, Y_train, X_test, Y_test = augmentdataset(iteration)
+        del model
+        del predictions
         model = initialize_model()
         predictions = model(x)
-        train_params = {
-            'nb_epochs': 25,
-            'batch_size': 128,
-            'learning_rate': 0.1
-            }
-        model_train(sess, x, y, predictions, X_train, Y_train,
-                    evaluate=evaluate, args=train_params)
+        model.fit(X_train,Y_train,epochs=10,batch_size=128,verbose=1)
+        score = model.evaluate(X_test,Y_test,verbose=0)
+        print(score[1])
+
+        DO_FGSM(model,x,y,predictions,sess,0)
+
+        X_train, Y_train, X_test, Y_test = augmentdataset(iteration)
+        del model
+        del predictions
+        model = initialize_model()
+        predictions = model(x)
+        model.fit(X_train,Y_train,epochs=10,batch_size=128,verbose=1)
+        score = model.evaluate(X_test,Y_test,verbose=0)
+        print(score[1])
+
         save_CPPN_model(model,iteration)
         iteration=iteration+1
         makenewdirectories(iteration)
+
         clazz = 9
         k = -1
         done = np.zeros((10),dtype=np.int8)
@@ -286,6 +321,7 @@ while 1:
         done[clazz]=done[clazz]-1
     gen = 0
     lastsave = 0
+    lasthigh = 0
     clazz = (clazz+1)%10
     if clazz == 0:
         k = k + 1

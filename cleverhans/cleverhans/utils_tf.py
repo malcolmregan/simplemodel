@@ -86,6 +86,8 @@ def model_train(sess, x, y, predictions, X_train, Y_train, save=False,
                  and 'filename'
     :return: True if model trained
     """
+    from keras.backend import manual_variable_initialization 
+    manual_variable_initialization(True)
     args = _FlagsWrapper(args or {})
 
     # Check that necessary arguments were given (see doc above)

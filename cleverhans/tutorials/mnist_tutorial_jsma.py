@@ -124,9 +124,10 @@ def main(argv=None):
 
         # We want to find an adversarial example for each possible target class
         # (i.e. all classes that differ from the label given in the dataset)
+        sample_ind = np.where(Y_test[:,sample_ind]==1.)[0][0]
         current_class = int(np.argmax(Y_test[sample_ind]))
         target_classes = other_classes(FLAGS.nb_classes, current_class)
-
+        print(current_class)
         # For the grid visualization, keep original images along the diagonal
         grid_viz_data[current_class, current_class, :, :, :] = np.reshape(
             X_test[sample_ind:(sample_ind+1)],
@@ -143,7 +144,6 @@ def main(argv=None):
                            'nb_classes': FLAGS.nb_classes, 'clip_min': 0.,
                            'clip_max': 1., 'targets': y,
                            'y_val': one_hot_target}
-            print(np.shape(X_test[sample_ind:(sample_ind+1)]))
             adv_x = jsma.generate_np(X_test[sample_ind:(sample_ind+1)],
                                      **jsma_params)
 
@@ -155,7 +155,7 @@ def main(argv=None):
             test_in_reshape = X_test[sample_ind].reshape(-1)
             nb_changed = np.where(adv_x_reshape != test_in_reshape)[0].shape[0]
             percent_perturb = float(nb_changed) / adv_x.reshape(-1).shape[0]
-
+            """
             # Display the original and adversarial images side-by-side
             if FLAGS.viz_enabled:
                 if 'figure' not in vars():
@@ -169,14 +169,14 @@ def main(argv=None):
                                    (FLAGS.img_rows, FLAGS.img_cols)),
                         np.reshape(adv_x, (FLAGS.img_rows,
                                    FLAGS.img_cols)), figure)
-
+            """
             # Add our adversarial example to our grid data
             grid_viz_data[target, current_class, :, :, :] = np.reshape(
                 adv_x, (FLAGS.img_rows, FLAGS.img_cols, FLAGS.nb_channels))
 
             # Update the arrays for later analysis
-            results[target, sample_ind] = res
-            perturbations[target, sample_ind] = percent_perturb
+            results[target, current_class] = res
+            perturbations[target, current_class] = percent_perturb
 
     print('--------------------------------------')
 
