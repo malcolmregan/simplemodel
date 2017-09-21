@@ -1,8 +1,5 @@
 # simplemodel
 
-The file generate_FGSM_and_train.py was created for the purposes of troubleshooting the problem at hand.
-It trains a model on MNIST. generates FGSM examples for this model, and trains a new model on the FGSM examples.
-
 TO RUN FGSM+CPPN TRAINING SCRIPT:
 
     add cleverhans path to PYTHONPATH before running:
