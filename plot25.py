@@ -5,8 +5,8 @@ import os
 import numpy as np
 import random
 
-ITER_NUM=0
-datadir='./FGSMGenerated/FGSMx{}/'.format(ITER_NUM)
+ITER_NUM=3
+datadir='./CPPNGenerated/CPPNx{}/'.format(ITER_NUM)
 
 for CLASS in range(0,10):
     fig = plt.figure()
@@ -31,10 +31,13 @@ for CLASS in range(0,10):
             data=np.load(examples[i])
             array=data['features']
             array=array[0,0,:,:]
-       
+                    
             ax[i] = fig.add_subplot(5 ,5, i+1, aspect='equal')
             ax[i].imshow(array, cmap='Greys', interpolation='nearest')
-
+            #targ = data['targets']
+            #print(targ)
+            #klazz = np.where(targ!=0)[0]
+            #print(klazz)
     else:
         ax = [0]*num_of_files
         for i in range(num_of_files):
@@ -46,6 +49,11 @@ for CLASS in range(0,10):
 
             ax[i] = fig.add_subplot(5 ,5, i+1, aspect='equal')
             ax[i].imshow(array, cmap='Greys', interpolation='nearest')
+
+            #targ = data['targets']
+            #print(targ)
+            #klazz = np.where(targ!=0)[0]
+            #print(klazz)
 
     manager = plt.get_current_fig_manager()
     manager.window.showMaximized()

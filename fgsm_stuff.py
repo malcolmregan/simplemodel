@@ -107,9 +107,6 @@ def DO_FGSM(model, x, y, predictions, sess, ITER_NUM):
     fgsm_params = {'eps': 0.3}
     adv_x = fgsm.generate(x, **fgsm_params)
     preds_adv = model(adv_x)
-
-    X_train=X_test
-    Y_train=Y_test
    
     count = 0
     print("Generating FGSM data")
@@ -137,12 +134,13 @@ def get_fgsm_data(ITER_NUM):
     for CLASS in range(10):
         files_in_dir = os.listdir('./FGSMGenerated/FGSMx{}/class{}'.format(ITER_NUM, CLASS))
         for files in files_in_dir:
+            #print(files)
             data = np.load(os.path.join('./FGSMGenerated/FGSMx{}/class{}'.format(ITER_NUM, CLASS), files))
             array = data['features']
-            targ = data['targets']
+            targ = CLASS
             array = array[0,0,:,:]
             examples[k,:,:,0,0] = array
-            examples[k,0,0,0,:] = targ
+            examples[k,0,0,0,targ] = 1
             k=k+1
 
     np.random.shuffle(examples)

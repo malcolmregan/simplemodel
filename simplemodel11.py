@@ -87,7 +87,7 @@ def augmentdataset(iteration):
             numberoffiles = numberoffiles + len(os.walk('./CPPNGenerated/CPPNx{}/class{}'.format(itera, CLASS)).next()[2])
     
     for itera in range(0,iteration+1):
-        if os.path.exists('./FGSMGenerated/FGSMx{}'.format(iteration)):
+        if os.path.exists('./FGSMGenerated/FGSMx{}'.format(itera)):
             X_fgsm, Y_fgsm = fgsm_stuff.get_fgsm_data(itera)
             numberoffiles = numberoffiles + np.shape(X_fgsm)[0]
 
@@ -111,11 +111,11 @@ def augmentdataset(iteration):
                 k=k+1
 
     for itera in range(0, iteration+1):
-        if os.path.exists('./FGSMGenerated/FGSMx{}'.format(iteration)):
+        if os.path.exists('./FGSMGenerated/FGSMx{}'.format(itera)):
 	    X_fgsm, Y_fgsm = fgsm_stuff.get_fgsm_data(itera)
             examples[k:(k+np.shape(X_fgsm)[0]),:,:,0,0]=X_fgsm[:,:,:,0]
             examples[k:(k+np.shape(X_fgsm)[0]),0,0,0,:]=Y_fgsm
-            k = k + np.shape(X_fgsm)[0]+1
+            k = k + np.shape(X_fgsm)[0]
         
     np.random.shuffle(examples)
 

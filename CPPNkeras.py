@@ -219,8 +219,9 @@ if gen_iter >= 1:
     if gen_iter > train_iter:
         q = raw_input('Continue [G]enerating for iteration {} or [T]rain next model? '.format(gen_iter))
     if train_iter == gen_iter:
-        iteration = end_iter(gen_iter)
-
+        iteration = gen_iter+1
+        makenewdirectories(iteration)    
+   
 if q == 'G':
     iteration = gen_iter
     model = loadcheckpoint(iteration-1)
@@ -254,7 +255,7 @@ elif q == 'T':
     score = model.evaluate(X_test,Y_test,verbose=0)
     print(score[1])
     
-    DO_FGSM(model,x,y,predictions,sess,0)
+    DO_FGSM(model,x,y,predictions,sess,iteration)
 
     X_train, Y_train, X_test, Y_test = augmentdataset(iteration)
     del model
@@ -299,7 +300,7 @@ while 1:
         score = model.evaluate(X_test,Y_test,verbose=0)
         print(score[1])
 
-        DO_FGSM(model,x,y,predictions,sess,0)
+        DO_FGSM(model,x,y,predictions,sess,iteration)
 
         X_train, Y_train, X_test, Y_test = augmentdataset(iteration)
         del model
@@ -314,6 +315,7 @@ while 1:
         iteration=iteration+1
         makenewdirectories(iteration)
 
+        raw_input()
         clazz = 9
         k = -1
         done = np.zeros((10),dtype=np.int8)
